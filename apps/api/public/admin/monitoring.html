@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Live Monitoring — CampusQR</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+      rel="stylesheet"
+    />
+    <link href="/css/main.css" rel="stylesheet" />
+    <style>
+      .monitor-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1rem;
+      }
+      .scan-tile {
+        padding: 1rem;
+        border-radius: 12px;
+        background: var(--card);
+        border-left: 4px solid var(--accent);
+        animation: slideIn 0.3s ease;
+      }
+      .scan-tile.valid {
+        border-left-color: var(--success);
+      }
+      .scan-tile.duplicate {
+        border-left-color: var(--warning);
+      }
+      .scan-tile.invalid,
+      .scan-tile.unauthorized {
+        border-left-color: var(--danger);
+      }
+      .pulse-dot {
+        width: 12px;
+        height: 12px;
+        background: var(--success);
+        border-radius: 50%;
+        animation: pulse 1.5s infinite;
+        display: inline-block;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.3;
+        }
+      }
+    </style>
+  </head>
+  <body style="margin: 0; background: #f1f5f9">
+    <section class="app-layout" id="app"></section>
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+    <script src="/js/app-shell.js"></script>
+    <script>
+      showAppLoading();
+    </script>
+    <script src="/js/api.js"></script>
+    <script src="/js/sounds.js"></script>
+    <script>
+      (async () => {
+        const user = await requireAuth(['admin']);
+        if (!user) return;
+        document.getElementById('app').innerHTML =
+          buildSidebar('/admin/monitoring.html', user) +
+          `
+        <main class="main-content">
+          <div class="top-bar">
+            <h1><span class="pulse-dot"></span> Live Scan Monitor</h1>
+            <span id="live-status" class="badge badge-success">Connected</span>
+          </div>
+          <div class="stat-grid" id="live-stats"></div>
+          <div class="card">
+            <h3>Real-time Scan Feed</h3>
+            <div class="monitor-grid" id="feed"></div>
+          </div>
+        </main>`;
+        initLogout();
+
+        const feed = document.getElementById('feed');
+        const socket = io();
+        socket.emit('join:monitoring');
+
+        async function loadStats() {
+          const s = await DashboardAPI.stats();
+          document.getElementById('live-stats').innerHTML = `
+          <div class="stat-card success"><div class="value" id="entries">${s.todayEntries}</div><div class="label">Entries Today</div></div>
+          <div class="stat-card danger"><div class="value">${s.invalidScans}</div><div class="label">Invalid</div></div>
+          <div class="stat-card warning"><div class="value">${s.duplicateToday}</div><div class="label">Duplicates</div></div>`;
+        }
+        await loadStats();
+
+        function addScan(data, silent = false) {
+          const tile = document.createElement('article');
+          tile.className = `scan-tile ${data.status || 'valid'}`;
+          tile.innerHTML = `
+          <strong>${data.student?.fullName || 'Unknown'}</strong>
+          <br><small>${data.scanType} · ${data.status} · ${data.message || ''}</small>
+          <br><small>${new Date(data.timestamp).toLocaleTimeString()}</small>`;
+          feed.prepend(tile);
+          while (feed.children.length > 30) feed.lastChild.remove();
+          if (!silent) {
+            if (data.status === 'valid') SoundFX.success();
+            else if (data.status === 'duplicate') SoundFX.warning();
+            else if (data.status !== 'valid') SoundFX.error();
+          }
+          loadStats();
+        }
+
+        socket.on('scan:live', (data) => addScan(data, false));
+        socket.on(
+          'connect',
+          () => (document.getElementById('live-status').textContent = 'Connected')
+        );
+        socket.on('disconnect', () => {
+          document.getElementById('live-status').textContent = 'Disconnected';
+          document.getElementById('live-status').className = 'badge badge-danger';
+        });
+
+        const logs = await ScansAPI.logs({ limit: 15 });
+        logs.reverse().forEach((l) =>
+          addScan(
+            {
+              scanType: l.scan_type,
+              status: l.status,
+              message: l.message,
+              student: l.full_name ? { fullName: l.full_name } : null,
+              timestamp: l.created_at,
+            },
+            true
+          )
+        );
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,66 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "npm: install",
+      "type": "shell",
+      "command": "npm install",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PATH": "${env:PATH}"
+        }
+      },
+      "group": "build",
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    },
+    {
+      "label": "npm: seed database",
+      "type": "shell",
+      "command": "npm run seed",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    },
+    {
+      "label": "npm: start server",
+      "type": "shell",
+      "command": "node server/index.js",
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
+      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "problemMatcher": {
+        "owner": "campusqr",
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "Campus QR System running at http://localhost"
+        }
+      }
+    },
+    {
+      "label": "campus: setup (install + seed)",
+      "dependsOrder": "sequence",
+      "dependsOn": ["npm: install", "npm: seed database"],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "campus: setup and start",
+      "dependsOrder": "sequence",
+      "dependsOn": ["campus: setup (install + seed)", "npm: start server"],
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Open in Browser",
+      "type": "shell",
+      "command": "start http://localhost:3000",
+      "windows": { "options": { "shell": { "executable": "cmd.exe", "args": ["/c"] } } },
+      "presentation": { "reveal": "silent" },
+      "problemMatcher": []
+    }
+  ]
+}

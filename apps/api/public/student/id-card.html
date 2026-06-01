@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My Student ID — CampusQR</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+      rel="stylesheet"
+    />
+    <link href="/css/main.css" rel="stylesheet" />
+  </head>
+  <body style="margin: 0; background: #f1f5f9">
+    <section class="app-layout" id="app"></section>
+    <script src="/js/app-shell.js"></script>
+    <script>
+      showAppLoading();
+    </script>
+    <script src="/js/api.js"></script>
+    <script src="/js/scanner.js"></script>
+    <script>
+      (async () => {
+        const params = new URLSearchParams(location.search);
+        const idParam = params.get('id');
+        let student;
+        let user;
+
+        if (idParam) {
+          user = await requireAuth(['admin', 'teacher', 'librarian', 'security', 'cafeteria']);
+          if (!user) return;
+          student = await StudentsAPI.get(idParam);
+        } else {
+          user = await requireAuth(['student', 'admin']);
+          if (!user) return;
+          if (user.role === 'student') {
+            student = await StudentsAPI.me();
+          } else {
+            window.location.href = '/admin/students.html';
+            return;
+          }
+        }
+
+        const sidebarPath =
+          user.role === 'student' ? '/student/id-card.html' : '/admin/students.html';
+        const title = idParam ? 'Student ID Card' : 'My Digital ID';
+
+        document.getElementById('app').innerHTML =
+          buildSidebar(sidebarPath, user) +
+          '<main class="main-content no-print">' +
+          '<header class="top-bar"><h1>' +
+          title +
+          '</h1>' +
+          '<span><button class="btn btn-primary" onclick="window.print()"><i class="bi bi-printer"></i> Print</button> ' +
+          '<button class="btn btn-outline" id="download-btn"><i class="bi bi-download"></i> Download QR</button></span></header>' +
+          '<section id="card-container"></section>' +
+          '<p id="card-error" style="color:var(--danger);display:none"></p>' +
+          '</main>';
+        initLogout();
+
+        try {
+          const qrRes = await fetch('/api/students/' + student.student_id + '/qr-image', {
+            headers: { Authorization: 'Bearer ' + getToken() },
+          });
+          if (!qrRes.ok) throw new Error('Could not load QR code');
+          const blob = await qrRes.blob();
+          const qrDataUrl = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.readAsDataURL(blob);
+          });
+          document.getElementById('card-container').innerHTML = renderIdCard(student, qrDataUrl);
+          document.getElementById('download-btn').addEventListener('click', () => {
+            const a = document.createElement('a');
+            a.href = qrDataUrl;
+            a.download = student.student_id + '-qr.png';
+            a.click();
+          });
+        } catch (ex) {
+          const errEl = document.getElementById('card-error');
+          errEl.textContent = ex.message;
+          errEl.style.display = 'block';
+        }
+      })();
+    </script>
+  </body>
+</html>

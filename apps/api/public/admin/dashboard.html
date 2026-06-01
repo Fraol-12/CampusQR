@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Dashboard — CampusQR</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+      rel="stylesheet"
+    />
+    <link href="/css/main.css" rel="stylesheet" />
+  </head>
+  <body style="margin: 0; background: #f1f5f9">
+    <section class="app-layout" id="app"></section>
+    <script src="/js/app-shell.js"></script>
+    <script>
+      showAppLoading();
+    </script>
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/sounds.js"></script>
+    <script>
+      (async () => {
+        try {
+          const user = await requireAuth(['admin']);
+          if (!user) return;
+          document.getElementById('app').innerHTML =
+            buildSidebar('/admin/dashboard.html', user) +
+            `
+          <main class="main-content">
+            <div class="top-bar">
+              <div><h1>Dashboard</h1><p style="color:var(--muted);margin:0">Welcome, ${user.fullName}</p></div>
+              <a href="/admin/monitoring.html" class="btn btn-primary"><i class="bi bi-broadcast"></i> Live Monitor</a>
+            </div>
+            <div class="stat-grid" id="stats"></div>
+            <div style="display:grid;grid-template-columns:2fr 1fr;gap:1.5rem">
+              <div class="card">
+                <div class="card-header"><h3 style="margin:0">Recent Scans</h3></div>
+                <div class="live-feed" id="recent-scans"></div>
+              </div>
+              <div class="card">
+                <div class="card-header"><h3 style="margin:0">Today's Breakdown</h3></div>
+                <div id="breakdown"></div>
+              </div>
+            </div>
+          </main>`;
+          initLogout();
+
+          async function loadStats() {
+            const s = await DashboardAPI.stats();
+            document.getElementById('stats').innerHTML = `
+            <div class="stat-card"><div class="value">${s.totalStudents}</div><div class="label">Active Students</div></div>
+            <div class="stat-card success"><div class="value">${s.todayEntries}</div><div class="label">Today's Entries</div></div>
+            <div class="stat-card danger"><div class="value">${s.invalidScans}</div><div class="label">Invalid Scans Today</div></div>
+            <div class="stat-card warning"><div class="value">${s.duplicateToday}</div><div class="label">Duplicate Blocks</div></div>
+            <div class="stat-card"><div class="value">${s.cafeteriaToday}</div><div class="label">Cafeteria Scans</div></div>
+            <div class="stat-card"><div class="value">${s.attendanceToday}</div><div class="label">Attendance Today</div></div>
+          `;
+
+            document.getElementById('recent-scans').innerHTML =
+              s.recentScans
+                .map(
+                  (log) => `
+            <div class="live-feed-item">
+              <span class="dot ${log.status}"></span>
+              <div style="flex:1">
+                <strong>${log.full_name || log.student_id || 'Unknown'}</strong>
+                <br><small>${log.scan_type} · ${log.status} · ${new Date(log.created_at).toLocaleString()}</small>
+              </div>
+            </div>
+          `
+                )
+                .join('') || '<p style="color:var(--muted)">No scans yet</p>';
+
+            document.getElementById('breakdown').innerHTML =
+              s.scanBreakdown
+                .map(
+                  (b) =>
+                    `<p><span class="badge badge-${b.status === 'valid' ? 'success' : b.status === 'duplicate' ? 'warning' : 'danger'}">${b.scan_type}</span> ${b.status}: <strong>${b.count}</strong></p>`
+                )
+                .join('') || '<p style="color:var(--muted)">No activity today</p>';
+          }
+
+          await loadStats();
+          const socket = io();
+          socket.on('scan:live', () => loadStats());
+          setInterval(loadStats, 30000);
+        } catch (e) {
+          showAppError(e.message);
+        }
+      })();
+    </script>
+  </body>
+</html>

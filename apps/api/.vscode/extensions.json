@@ -1,0 +1,13 @@
+{
+  "recommendations": [
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "christian-kohler.npm-intellisense",
+    "christian-kohler.path-intellisense",
+    "formulahendry.auto-rename-tag",
+    "ritwickdey.LiveServer",
+    "humao.rest-client",
+    "ms-vscode.js-debug",
+    "PKief.material-icon-theme"
+  ]
+}

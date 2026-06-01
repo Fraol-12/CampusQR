@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Attendance Scanner — CampusQR</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+      rel="stylesheet"
+    />
+    <link href="/css/main.css" rel="stylesheet" />
+  </head>
+  <body style="margin: 0; background: #f1f5f9">
+    <section class="app-layout" id="app"></section>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <script src="/js/app-shell.js"></script>
+    <script>
+      showAppLoading();
+    </script>
+    <script src="/js/api.js"></script>
+    <script src="/js/scanner.js"></script>
+    <script src="/js/sounds.js"></script>
+    <script>
+      (async () => {
+        const user = await requireAuth(['admin', 'teacher']);
+        if (!user) return;
+        const courses = await AttendanceAPI.courses();
+
+        document.getElementById('app').innerHTML =
+          buildSidebar('/scanner/attendance.html', user) +
+          `
+        <main class="main-content">
+          <h1><i class="bi bi-calendar-check"></i> Attendance Scanner</h1>
+          <div class="card" style="margin-bottom:1rem">
+            <label>Select Course</label>
+            <select id="course" class="form-control" style="max-width:300px" required>
+              ${courses.map((c) => `<option value="${c.code}">${c.code} — ${c.name}</option>`).join('')}
+            </select>
+          </div>
+          <div class="scanner-layout">
+            <div class="card"><div id="qr-reader"></div></div>
+            <div id="scan-result" class="scan-result idle"><h2>Select course & scan</h2></div>
+          </div>
+          <div class="card" style="margin-top:1.5rem">
+            <h3>Today's Attendance</h3>
+            <div id="today-list"></div>
+          </div>
+        </main>`;
+        initLogout();
+
+        const resultEl = document.getElementById('scan-result');
+        async function loadToday() {
+          const course = document.getElementById('course').value;
+          const today = new Date().toISOString().slice(0, 10);
+          const rows = await AttendanceAPI.list({ course, date: today });
+          document.getElementById('today-list').innerHTML = rows.length
+            ? `<p>${rows.length} students marked present</p><ul>${rows.map((r) => `<li>${r.full_name} (${r.student_id}) at ${r.attendance_time}</li>`).join('')}</ul>`
+            : '<p style="color:var(--muted)">No attendance yet</p>';
+        }
+
+        const scanner = new QrScanner('qr-reader', async (qrData) => {
+          const course = document.getElementById('course').value;
+          try {
+            const result = await AttendanceAPI.scan(qrData, course);
+            if (result.alreadyMarked) result.display = 'warning';
+            renderScanResult(resultEl, result);
+            loadToday();
+          } catch (ex) {
+            renderScanResult(resultEl, { display: 'unauthorized', message: ex.message });
+          }
+        });
+        try {
+          await scanner.start();
+        } catch (e) {
+          resultEl.innerHTML = `<p>${e.message}</p>`;
+        }
+        document.getElementById('course').onchange = loadToday;
+        await loadToday();
+      })();
+    </script>
+  </body>
+</html>
